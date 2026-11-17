@@ -47,10 +47,10 @@ export interface RequestOptions {
 
 /**
  * FindOptions extends RequestOptions with pagination controls for find().
- * The server defaults to page=0 and size=10. Maximum size is 20.
+ * Page size limits and defaults are owned by table-srv; the SDK forwards them as-is.
  */
 export interface FindOptions extends RequestOptions {
-  /** Number of rows per page (1–20). If omitted, the server uses its default of 10. */
+  /** Number of rows per page. If omitted, the server default applies. */
   size?: number;
   /** Zero-based page index. If omitted, defaults to 0. */
   page?: number;
@@ -236,14 +236,7 @@ export class CnipsTableAccessor<T> implements TableAccessor<T> {
 
   /**
    * Inserts multiple records into the specified table.
-   * Mirrors Go's BulkInsert method.
-   */
-  private static readonly MAX_ROWS_PER_REQUEST = 20;
-  private static readonly MAX_DELETE_IDS = 100;
-
-  /**
-   * Inserts multiple records into the specified table.
-   * Maximum 20 rows per request.
+   * Row-count limits are enforced by table-srv, not the SDK.
    */
   async bulkInsert(
     tableId: string,
@@ -252,11 +245,6 @@ export class CnipsTableAccessor<T> implements TableAccessor<T> {
   ): Promise<void> {
     if (!data || data.length === 0) {
       throw new Error("data cannot be empty");
-    }
-    if (data.length > CnipsTableAccessor.MAX_ROWS_PER_REQUEST) {
-      throw new Error(
-        `bulk insert limited to ${CnipsTableAccessor.MAX_ROWS_PER_REQUEST} rows per request, got ${data.length}`
-      );
     }
 
     const requestURL = this.buildURL(tableId);
@@ -267,8 +255,7 @@ export class CnipsTableAccessor<T> implements TableAccessor<T> {
   /**
    * Retrieves records from the specified table matching the query.
    * Uses POST request to /search endpoint with query in the request body.
-   * Without FindOptions the server applies its defaults (page=0, size=10).
-   * Pass FindOptions to control pagination. Maximum size is 20.
+   * Without FindOptions the server applies its default paging.
    */
   async find(
     tableId: string,
@@ -363,7 +350,7 @@ export class CnipsTableAccessor<T> implements TableAccessor<T> {
   /**
    * Removes records from the specified table matching the query.
    * Uses DELETE request with query in the request body.
-   * Mirrors Go's Delete method.
+   * Large deletes are processed asynchronously by table-srv (202 Accepted).
    */
   async delete(
     tableId: string,
@@ -379,12 +366,12 @@ export class CnipsTableAccessor<T> implements TableAccessor<T> {
       requestBody,
       options
     );
-    await this.handleResponse(resp, 200, 204);
+    await this.handleResponse(resp, 200, 202, 204);
   }
 
   /**
    * Removes specific rows by their IDs.
-   * Maximum 100 row IDs per request.
+   * The empty check stays: table-srv treats a delete without rowIds/filters as "delete all rows".
    */
   async deleteByIds(
     tableId: string,
@@ -393,11 +380,6 @@ export class CnipsTableAccessor<T> implements TableAccessor<T> {
   ): Promise<void> {
     if (!rowIds || rowIds.length === 0) {
       throw new Error("rowIds cannot be empty");
-    }
-    if (rowIds.length > CnipsTableAccessor.MAX_DELETE_IDS) {
-      throw new Error(
-        `deleteByIds limited to ${CnipsTableAccessor.MAX_DELETE_IDS} IDs per request, got ${rowIds.length}`
-      );
     }
 
     const requestURL = this.buildURL(tableId);

@@ -30,7 +30,7 @@ const tableId = "users-table-id";
 // Insert a single row
 await accessor.insert(tableId, { name: "Ada", email: "ada@example.com", age: 36 });
 
-// Bulk insert (max 20 rows per request)
+// Bulk insert (max 100 rows per request, enforced by table-srv)
 await accessor.bulkInsert(tableId, [
   { name: "Alan", email: "alan@example.com", age: 41 },
   { name: "Grace", email: "grace@example.com", age: 85 },
@@ -54,7 +54,7 @@ const updated = await accessor.update(
 // Delete rows matching a query
 await accessor.delete(tableId, { name: "Ada" });
 
-// Delete specific rows by their IDs (max 100 IDs per request)
+// Delete specific rows by their IDs (max 100 IDs per request, enforced by table-srv)
 await accessor.deleteByIds(tableId, ["row-id-1", "row-id-2"]);
 ```
 
@@ -76,7 +76,7 @@ const accessor = new CnipsTableAccessor<User>(
 | Method                                        | Description                                                |
 | --------------------------------------------- | ---------------------------------------------------------- |
 | `insert(tableId, data, options?)`             | Insert a single row.                                       |
-| `bulkInsert(tableId, data[], options?)`       | Insert multiple rows (max 20 per request).                 |
+| `bulkInsert(tableId, data[], options?)`       | Insert multiple rows (max 100 per request).                 |
 | `find(tableId, query, options?)`              | Search rows matching the filter map.                       |
 | `count(tableId, query, options?)`             | Get total number of rows matching the filter.              |
 | `update(tableId, query, data, options?)`      | Update rows matching the filter; returns the updated rows. |
@@ -85,12 +85,15 @@ const accessor = new CnipsTableAccessor<User>(
 
 ### Limits
 
+Limits are enforced by table-srv; the SDK forwards requests unchanged and returns the server's error if one is exceeded.
+
 | Limit                              | Value   |
 | ---------------------------------- | ------- |
-| Max rows per insert/bulk-update    | **20**  |
+| Max rows per insert/bulk-update    | **100** |
 | Max row IDs per bulk delete        | **100** |
-| Max page size (find)               | **20**  |
+| Max page size (find)               | **100** |
 | Max row size                       | **1 MB**|
+| Filter delete above 10,000 rows    | runs asynchronously (202 Accepted) |
 
 ### Pagination (FindOptions)
 
@@ -98,12 +101,12 @@ You can pass an optional `FindOptions` to control pagination:
 
 ```typescript
 interface FindOptions extends RequestOptions {
-  size?: number; // Rows per page (1–20). Server default: 10.
+  size?: number; // Rows per page (1–100). Server default: 20.
   page?: number; // Zero-based page index. Server default: 0.
 }
 ```
 
-> **Note:** Without `FindOptions`, the server returns at most **10 rows** (the default page size). The maximum allowed size is **20**.
+> **Note:** Without `FindOptions`, the server returns at most **20 rows** (the default page size). Sizes above **100** are capped to 100 by the server.
 
 Use `count()` to get the total number of matching rows, then paginate with `find()`:
 
